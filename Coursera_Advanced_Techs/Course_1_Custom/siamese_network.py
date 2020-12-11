@@ -1,8 +1,10 @@
 import os
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from tensorflow.keras.layers import Input, Dense, Flatten, Dropout
 from tensorflow.keras.models import Model
+from tensorflow.keras.losses import Loss
 from tensorflow.keras import backend as K
 import tensorflow as tf
 from tensorflow.keras.datasets import fashion_mnist
@@ -43,6 +45,7 @@ def create_pairs_on_set(images, labels):
 
     return pairs, y
 
+
 def initialize_base_network():
     input = Input(shape=(28, 28,))
     x = Flatten()(input)
@@ -53,26 +56,45 @@ def initialize_base_network():
     x = Dense(128, activation='relu')(x)
     return Model(inputs=input, outputs=x)
 
+
 def euclidean_distance(vects):
     x, y = vects
     sum_square = K.sum(K.square(x - y), axis=1, keepdims=True)
     return K.sqrt(K.maximum(sum_square, K.epsilon()))
 
+
 def eucl_dist_output(shapes):
     shape1, shape2 = shapes
     return (shape1[0], 1)
+
 
 def contrastive_loss_with_margin(margin):
     def contrastive_loss(y_true, y_pred):
         square_pred = K.square(y_pred)
         margin_square = K.square(K.maximum(margin - y_pred, 0))
         return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
+
     return contrastive_loss
+
+
+# alternative implementation of contrastive loss
+
+class ContrastiveLoss(Loss):
+    margin = 0
+
+    def __init__(self, margin):
+        super().__init__()
+        self.margin = margin
+
+    def call(self, y_true, y_pred):
+        square_pred = K.square(y_pred)
+        margin_square = K.square(K.maximum(self.margin - y_pred, 0))
+        return K.mean(y_true * square_pred + (1 - y_true) * margin_square)
+
 
 tr_pairs, tr_y = create_pairs_on_set(train_images, train_labels)
 
 ts_pairs, ts_y = create_pairs_on_set(test_images, test_labels)
-
 
 base_network = initialize_base_network()
 
@@ -89,18 +111,20 @@ model = Model([input_a, input_b], output)
 
 model.compile(loss=contrastive_loss_with_margin(margin=1), optimizer=tf.keras.optimizers.RMSprop())
 
-history = model.fit([tr_pairs[:,0],
-                     tr_pairs[:,1]],
+history = model.fit([tr_pairs[:, 0],
+                     tr_pairs[:, 1]],
                     tr_y,
                     epochs=20,
                     batch_size=128,
-                    validation_data=([ts_pairs[:,0], ts_pairs[:,1]], ts_y))
+                    validation_data=([ts_pairs[:, 0], ts_pairs[:, 1]], ts_y))
+
 
 def compute_accuracy(y_true, y_pred):
     pred = y_pred.ravel() > 0.5
     return np.mean(pred == y_true)
 
-loss = model.evaluate(x = [ts_pairs[:, 0], ts_pairs[:, 1]], y = ts_y)
+
+loss = model.evaluate(x=[ts_pairs[:, 0], ts_pairs[:, 1]], y=ts_y)
 
 y_pred_train = model.predict([tr_pairs[:, 0], tr_pairs[:, 1]])
 train_accuracy = compute_accuracy(tr_y, y_pred_train)
