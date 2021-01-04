@@ -6,8 +6,8 @@ from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 from tensorflow.keras.datasets import cifar10
 
-physical_devices = tf.config.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
+#physical_devices = tf.config.list_physical_devices('GPU')
+#tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 x_train = x_train.astype('float32') / 255.
@@ -49,19 +49,28 @@ def my_model():
     model = keras.Model(inputs=inputs, outputs=outputs)
     return model
 
+def scheduler(epoch, lr):
+    if epoch <= 150:
+        return lr
+    else:
+        return lr * tf.math.exp(-0.1)
+    return epoch, lr
+
 ES = keras.callbacks.EarlyStopping(monitor='accuracy', patience=3)
+LR = keras.callbacks.LearningRateScheduler(schedule=scheduler)
+
 
 model = my_model()
 
 model.compile(
     loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
     optimizer=keras.optimizers.Adam(lr=3e-4),
-    metrics=['accuracy']
+    metrics=['accuracy'],
 )
 
 print(model.summary())
 
-model.fit(x_train, y_train, batch_size=64, epochs=200, verbose=2)
+model.fit(x_train, y_train, batch_size=64, epochs=200, callbacks=[LR])
 
 model.evaluate(x_test, y_test, verbose=2)
 
